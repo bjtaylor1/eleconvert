@@ -261,3 +261,4 @@ __pycache__/
 *.pyc
 /eleconvert/roadstransformed.txt
 /eleconvert/great-britain-latest.input.txt
+/eleconvert/france-latest.input.txt

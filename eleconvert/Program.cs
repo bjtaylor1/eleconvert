@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -21,7 +22,7 @@ namespace eleconvert
             {
                 await dbconnection.OpenAsync().ConfigureAwait(false);
                 var batches = new List<int>();
-                using (var batchQuery = new SqlCommand("select distinct batch from roads", dbconnection))
+                using (var batchQuery = new SqlCommand("select distinct batch from roads", dbconnection) { CommandTimeout = 0 })
                 {
                     using (var batchReader = await batchQuery.ExecuteReaderAsync().ConfigureAwait(false))
                     {
@@ -46,14 +47,15 @@ namespace eleconvert
 
                 var resultsFileLock = new object();
                 //batches = batches.Take(1).ToList();
-                using (var httpClient = new HttpClient { BaseAddress = new Uri("https://api.open-elevation.com/") })
+                int batchesDone = 0;
+                using (var httpClient = new HttpClient { BaseAddress = new Uri("https://api.open-elevation.com/"), Timeout = Timeout.InfiniteTimeSpan })
                 {
                     var tasks = batches.Select(async batch =>
                     {
                         try
                         {
                             var locations = new ConcurrentBag<Location>();
-                            using (var latLongsQuery = new SqlCommand("select lat,lon from roads where batch = @batch", dbconnection))
+                            using (var latLongsQuery = new SqlCommand("select lat,lon from roads where batch = @batch", dbconnection) { CommandTimeout = 0 })
                             {
                                 latLongsQuery.Parameters.AddWithValue("@batch", batch);
                                 using (var latLongsReader = await latLongsQuery.ExecuteReaderAsync().ConfigureAwait(false))
@@ -80,8 +82,8 @@ namespace eleconvert
                                 lock(resultsFileLock)
                                 {
                                     File.AppendAllLines(resultsFile, responseData.Results.Select(r => $"{r.Latitude},{r.Longitude},{r.Elevation}"));
+                                    Console.WriteLine(Interlocked.Increment(ref batchesDone));
                                 }
-                                Console.WriteLine(".");
                             }
                         }
                         catch(Exception e)
