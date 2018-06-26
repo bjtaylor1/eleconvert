@@ -33,11 +33,19 @@ namespace eleconvert
                 }
 
                 const string failedBatchesFile = "failedbatches.txt";
+                const string resultsFile = "results.txt";
                 if(File.Exists(failedBatchesFile))
                 {
                     File.Delete(failedBatchesFile);
                 }
-                batches = batches.Take(1).ToList();
+
+                if(File.Exists(resultsFile))
+                {
+                    File.Delete(resultsFile);
+                }
+
+                var resultsFileLock = new object();
+                //batches = batches.Take(1).ToList();
                 using (var httpClient = new HttpClient { BaseAddress = new Uri("https://api.open-elevation.com/") })
                 {
                     var tasks = batches.Select(async batch =>
@@ -69,21 +77,11 @@ namespace eleconvert
                                 var responseString = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                                 var responseData = JsonConvert.DeserializeObject<Response>(responseString);
 
-                                using (var updateCommand = new SqlCommand("update roads set Elevation=@ele where lat = @lat and lon = @lon", dbconnection))
+                                lock(resultsFileLock)
                                 {
-                                    var latParam = updateCommand.Parameters.Add("@lat", SqlDbType.VarChar, 255);
-                                    var lonParam = updateCommand.Parameters.Add("@lon", SqlDbType.VarChar, 255);
-                                    var eleParam = updateCommand.Parameters.Add("@ele", SqlDbType.Int);
-                                    foreach (var result in responseData.Results)
-                                    {
-                                        latParam.Value = result.Latitude;
-                                        lonParam.Value = result.Longitude;
-                                        eleParam.Value = result.Elevation;
-                                        await updateCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
-                                        Console.Write(".");
-                                    }
-                                    Console.WriteLine("!");
+                                    File.AppendAllLines(resultsFile, responseData.Results.Select(r => $"{r.Latitude},{r.Longitude},{r.Elevation}"));
                                 }
+                                Console.WriteLine(".");
                             }
                         }
                         catch(Exception e)
