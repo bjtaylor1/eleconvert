@@ -8,8 +8,10 @@ namespace eleconvert
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
+            Console.WriteLine("Running");
+            return 0;
         }
     }
 }
