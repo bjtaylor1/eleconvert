@@ -262,3 +262,7 @@ __pycache__/
 /eleconvert/roadstransformed.txt
 /eleconvert/great-britain-latest.input.txt
 /eleconvert/france-latest.input.txt
+/eleconvert/results.txt
+/eleconvert/ireland-and-northern-ireland-latest.input.txt
+*.csv
+/eleconvert/failedbatches.txt

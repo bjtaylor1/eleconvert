@@ -22,7 +22,7 @@ namespace eleconvert
             {
                 await dbconnection.OpenAsync().ConfigureAwait(false);
                 var batches = new List<int>();
-                using (var batchQuery = new SqlCommand("select distinct batch from roads", dbconnection) { CommandTimeout = 0 })
+                using (var batchQuery = new SqlCommand("select distinct id/1000 as batch from roads", dbconnection) { CommandTimeout = 0 })
                 {
                     using (var batchReader = await batchQuery.ExecuteReaderAsync().ConfigureAwait(false))
                     {
@@ -50,29 +50,25 @@ namespace eleconvert
                 int batchesDone = 0;
                 using (var httpClient = new HttpClient { BaseAddress = new Uri("https://api.open-elevation.com/"), Timeout = Timeout.InfiniteTimeSpan })
                 {
-                    var tasks = batches.Select(async batch =>
+                    foreach(var batch in batches)
                     {
                         try
                         {
                             var locations = new ConcurrentBag<Location>();
-                            using (var latLongsQuery = new SqlCommand("select lat,lon from roads where batch = @batch", dbconnection) { CommandTimeout = 0 })
+                            using (var latLongsQuery = new SqlCommand("select lat,lon from roads where (id/1000) = @batch", dbconnection) { CommandTimeout = 0 })
                             {
                                 latLongsQuery.Parameters.AddWithValue("@batch", batch);
                                 using (var latLongsReader = await latLongsQuery.ExecuteReaderAsync().ConfigureAwait(false))
                                 {
                                     while (await latLongsReader.ReadAsync().ConfigureAwait(false))
                                     {
-                                        var lat = await latLongsReader.GetFieldValueAsync<string>(latLongsReader.GetOrdinal("lat")).ConfigureAwait(false);
-                                        var lon = await latLongsReader.GetFieldValueAsync<string>(latLongsReader.GetOrdinal("lon")).ConfigureAwait(false);
+                                        var lat = await latLongsReader.GetFieldValueAsync<double>(latLongsReader.GetOrdinal("lat")).ConfigureAwait(false);
+                                        var lon = await latLongsReader.GetFieldValueAsync<double>(latLongsReader.GetOrdinal("lon")).ConfigureAwait(false);
                                         locations.Add(new Location { Latitude = lat, Longitude = lon });
                                     }
                                 }
                                 var request = new Request { Locations = locations.ToArray() };
-                                var jsonRequestString = JsonConvert.SerializeObject(request, new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() })
-                                    .Replace("\"", "")
-                                    .Replace("longitude", "\"longitude\"")
-                                    .Replace("latitude", "\"latitude\"")
-                                    .Replace("locations", "\"locations\"");
+                                var jsonRequestString = JsonConvert.SerializeObject(request, new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
                                 var httpResponse = await httpClient.PostAsync("api/v1/lookup", new StringContent(jsonRequestString, Encoding.UTF8, "application/json"));
 
                                 httpResponse.EnsureSuccessStatusCode();
@@ -90,8 +86,7 @@ namespace eleconvert
                         {
                             File.AppendAllLines(failedBatchesFile, new[] { $"{batch}: {e.ToString()}", string.Empty });
                         }
-                    }).ToArray();
-                    Task.WaitAll(tasks);
+                    }
                 }
 
                 Console.WriteLine();
@@ -107,8 +102,8 @@ namespace eleconvert
 
     public class Location
     {
-        public string Latitude { get; set; }
-        public string Longitude { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
     }
 
     public class Response
